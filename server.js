@@ -1,75 +1,50 @@
 const express = require('express');
 const cors = require('cors');
+const axios = require('axios');
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+
+// Sử dụng API Key công khai của TMDB (miễn phí)
+const TMDB_API_KEY = '85973b3133345759178652277d337a89'; 
 
 const manifest = {
   id: 'org.example.motchilladdon',
   version: '1.0.0',
-  name: 'Motchill Addon',
-  description: 'Addon xem phim từ Motchill cho Nuvio',
-  types: ['movie', 'series'],
+  name: 'Motchill Addon (Full)',
+  description: 'Addon tự động lấy 100+ phim hot từ TMDB',
+  types: ['movie'],
   resources: ['catalog', 'stream'],
-  catalogs: [
-    {
-      type: 'movie',
-      id: 'motchill_movies',
-      name: 'Phim mới Motchill'
-    }
-  ],
+  catalogs: [{ type: 'movie', id: 'motchill_movies', name: 'Top 100 Phim Hot' }],
   idPrefixes: ['motchill_']
 };
 
-app.get('/manifest.json', (req, res) => {
-  res.json(manifest);
-});
+app.get('/manifest.json', (req, res) => res.json(manifest));
 
-// Trả về danh sách phim mẫu để hiển thị ổn định trên Nuvio
 app.get('/catalog/:type/:id.json', async (req, res) => {
-  const { id } = req.params;
-
-  if (id === 'motchill_movies') {
-    const metas = [
-      {
-        id: 'motchill_1',
+  try {
+    let allMovies = [];
+    // Lấy 5 trang (mỗi trang 20 phim = 100 phim)
+    for (let page = 1; page <= 5; page++) {
+      const response = await axios.get(`https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}&language=vi-VN&page=${page}`);
+      const movies = response.data.results.map(m => ({
+        id: 'motchill_' + m.id,
         type: 'movie',
-        name: 'Avengers: Endgame',
-        poster: 'https://image.tmdb.org/t/p/w500/or06FN3Dka5tukK1e9sl16pB3iy.jpg',
-        description: 'Hồi kết của vũ trụ điện ảnh Marvel.'
-      },
-      {
-        id: 'motchill_2',
-        type: 'movie',
-        name: 'Spider-Man: No Way Home',
-        poster: 'https://image.tmdb.org/t/p/w500/1g0dhYtq4hrTY1GPzxvfi1lxQR9.jpg',
-        description: 'Người Nhện đối đầu với các kẻ thù đa vũ trụ.'
-      }
-    ];
-    return res.json({ metas });
+        name: m.title,
+        poster: m.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : '',
+        description: m.overview
+      }));
+      allMovies.push(...movies);
+    }
+    res.json({ metas: allMovies });
+  } catch (error) {
+    res.json({ metas: [] });
   }
-
-  res.json({ metas: [] });
 });
 
-app.get('/stream/:type/:id.json', async (req, res) => {
-  const { id } = req.params;
-
-  if (id.startsWith('motchill_')) {
-    const streams = [
-      {
-        title: 'Motchill Server - 1080p',
-        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'
-      }
-    ];
-    return res.json({ streams });
-  }
-
-  res.json({ streams: [] });
+app.get('/stream/:type/:id.json', (req, res) => {
+  // Demo stream
+  res.json({ streams: [{ title: 'Xem chất lượng cao', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4' }] });
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server đang chạy trên cổng ${PORT}`);
-});
+app.listen(process.env.PORT || 3000);
