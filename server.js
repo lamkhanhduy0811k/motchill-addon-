@@ -1,47 +1,52 @@
 const express = require('express');
+const axios = require('axios');
 const cors = require('cors');
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+
+// Sử dụng API TMDB (miễn phí) để lấy poster và tên phim thật
+const TMDB_API_KEY = '5cc9196b0521e25287f395726214309c'; // API Key công cộng
+const BASE_URL = 'https://api.themoviedb.org/3';
 
 const manifest = {
-  id: 'org.example.motchilladdon',
+  id: 'org.example.motchillreal',
   version: '1.0.0',
-  name: 'Motchill Addon 100+',
-  description: 'Addon xem phim tổng hợp 100+ bộ',
+  name: 'Kho Phim Real',
+  description: 'Addon với phim và poster thật',
   types: ['movie'],
   resources: ['catalog', 'meta', 'stream'],
-  catalogs: [{ type: 'movie', id: 'motchill_movies', name: 'Kho Phim 100 Bộ' }],
-  idPrefixes: ['motchill_']
+  catalogs: [{ type: 'movie', id: 'top_movies', name: 'Phim Hot TMDB' }],
+  idPrefixes: ['tmdb_']
 };
-
-// Hàm tự sinh 100 bộ phim
-const generateMovies = () => {
-  let movies = [];
-  for (let i = 1; i <= 100; i++) {
-    movies.push({
-      id: `motchill_${i}`,
-      type: 'movie',
-      name: `Phim Bom Tấn ${i}`,
-      poster: `https://picsum.photos/id/${i + 10}/500/750`,
-      description: `Đây là bộ phim bom tấn số ${i} trong kho phim của bạn. Nội dung hấp dẫn đang chờ đón.`
-    });
-  }
-  return movies;
-};
-
-const moviesData = generateMovies();
 
 app.get('/manifest.json', (req, res) => res.json(manifest));
-app.get('/catalog/:type/:id.json', (req, res) => res.json({ metas: moviesData }));
-app.get('/meta/:type/:id.json', (req, res) => {
-  const movie = moviesData.find(m => m.id === req.params.id);
-  res.json({ meta: movie || {} });
-});
-app.get('/stream/:type/:id.json', (req, res) => {
-  res.json({ streams: [{ title: 'Xem phim chất lượng cao', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4' }] });
+
+app.get('/catalog/movie/top_movies.json', async (req, res) => {
+  try {
+    const response = await axios.get(`${BASE_URL}/movie/popular?api_key=${TMDB_API_KEY}&language=vi-VN`);
+    const metas = response.data.results.map(m => ({
+      id: `tmdb_${m.id}`,
+      type: 'movie',
+      name: m.title,
+      poster: `https://image.tmdb.org/t/p/w500${m.poster_path}`,
+      description: m.overview
+    }));
+    res.json({ metas });
+  } catch (e) { res.json({ metas: [] }); }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server chạy tại cổng ${PORT}`));
+app.get('/meta/movie/:id.json', async (req, res) => {
+  const id = req.params.id.replace('tmdb_', '');
+  try {
+    const response = await axios.get(`${BASE_URL}/movie/${id}?api_key=${TMDB_API_KEY}&language=vi-VN`);
+    res.json({ meta: { id: `tmdb_${id}`, name: response.data.title, poster: `https://image.tmdb.org/t/p/w500${response.data.poster_path}`, description: response.data.overview } });
+  } catch (e) { res.json({ meta: {} }); }
+});
+
+app.get('/stream/movie/:id.json', (req, res) => {
+  // Link phim mẫu (Vì addon chỉ có nhiệm vụ hiển thị info, còn link phim thực tế phụ thuộc vào nguồn bạn muốn chèn)
+  res.json({ streams: [{ title: 'Xem Online', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4' }] });
+});
+
+app.listen(process.env.PORT || 3000);
